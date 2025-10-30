@@ -1,4 +1,4 @@
-import random, secrets
+import random
 from typing import List
 from user import User         
 from my_hash_function import hash_generator 

@@ -1,5 +1,3 @@
-import time
-
 def hash_generator(tekstas):
 
     # Paverčiam tekstą į sąrašą skaičių (ASCII)
