@@ -39,3 +39,10 @@ class UserGenerator:
             f.write("-" * len(header) + "\n")
             for u in self.users:
                 f.write(f"{u.name:30} {u.public_key:10} {u.balance:12,}\n")
+
+
+if __name__ == "__main__":
+    gen = UserGenerator(n_users=6)  # pakeiskite n_users jei reikia
+    gen.generate()
+    gen.to_text_file("users.txt")
+    print("users.txt sukurtas.")
