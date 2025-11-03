@@ -148,9 +148,9 @@ class UTXOGenerator:
                 f.write("\n---------------------------------------------------\n\n")
 
     def save_minimal_csv(self, path: str):
-        """Išsaugo minimalų CSV: transaction_id,sender,receiver,amount."""
+        """Išsaugo minimalų CSV: transaction_id,sender,receiver,amount,inputs."""
         with open(path, 'w', encoding='utf-8') as f:
-            f.write("transaction_id,sender,receiver,amount\n")
+            f.write("transaction_id,sender,receiver,amount,inputs\n")
             for tx in self.transactions:
                 sender = tx.inputs[0].owner if tx.inputs else ""
                 # Parenkam gavėjo output (jei yra change atgal siuntėjui – praleidžiam)
@@ -160,7 +160,9 @@ class UTXOGenerator:
                     amount = recv_out.amount
                 else:
                     receiver, amount = "", 0
-                f.write(f"{tx.transaction_id},{sender},{receiver},{amount}\n")
+                # inputs as semi-colon separated "txid:tr_index"
+                inputs_field = ";".join(f"{inp.transaction_id}:{inp.tr_index}" for inp in tx.inputs) if tx.inputs else ""
+                f.write(f"{tx.transaction_id},{sender},{receiver},{amount},{inputs_field}\n")
 
     @staticmethod
     def load_users_from_file(path: str) -> List[User]:
