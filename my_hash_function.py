@@ -2,7 +2,6 @@ def hash_generator(tekstas):
 
     # Paverčiam tekstą į sąrašą skaičių (ASCII)
     skaiciai = [ord(c) for c in tekstas]   # skaiciu masyvas
-
     
     d1 = 828930167
     suma = d1  # pradinis sumos reikšmė
@@ -16,3 +15,16 @@ def hash_generator(tekstas):
 
     hash = f"{suma:08x}" # skaiciaus formatavimas i hex su 8 simboliais
     return hash
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1:
+        tekstas = " ".join(sys.argv[1:])
+    else:
+        try:
+            tekstas = input("Įveskite tekstą hash'inimui: ")
+        except EOFError:
+            sys.exit(0)
+
+    print(hash_generator(tekstas))
