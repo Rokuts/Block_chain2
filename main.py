@@ -8,7 +8,7 @@ from Header import BlockHeader
 from merkel_root2 import build_block_body
 
 # Statinis pasirinkimas: keiskite čia į True arba False
-DEFAULT_USE_TREE: bool = True
+DEFAULT_USE_TREE: bool = False
 DEFAULT_MINE: bool = True
 
 def _format_levels_as_json(levels):
@@ -38,10 +38,26 @@ def build_genesis_block_from_csv(csv_path: str, prev_hash: str = "00000000", use
     # sukonstruojame header su pageidaujamu difficulty (naudojama kasybai, jei mine=True)
     header = BlockHeader.create_with_current_time(prev_hash=prev_hash, merkle_root=merkle_root, difficulty=difficulty)
 
+    # Mine pakeis header.nonce.
+    try:
+        if mine:
+            found_hash = header.mine(max_nonce=max_nonce)
+        else:
+            found_hash = header.hash()
+    except RuntimeError as e:
+        print(f"Klaida kasant bloką: {e}")
+        sys.exit(1)
+
+    # Patikriname rastą hash (neperkompensuojame papildomais hasho skaičiavimais)
+    if mine and not BlockHeader.validate_hash(found_hash, header.difficulty):
+        print("Kasyba nebuvo sėkminga: rastas hash neatitinka difficulty reikalavimo.")
+        sys.exit(1)
+
+    serialize = f"{header.prev_hash}|{header.timestamp}|{header.version}|{header.merkle_root}|{header.nonce}|{header.difficulty}"
 
     # Pagrindinis blokas
     block = {
-        
+        "Block_hash": found_hash,
         "header": {
             "prev_hash": header.prev_hash,
             "timestamp": header.timestamp,
@@ -49,7 +65,7 @@ def build_genesis_block_from_csv(csv_path: str, prev_hash: str = "00000000", use
             "merkle_root": header.merkle_root,
             "nonce": header.nonce,
             "difficulty": header.difficulty,
-            
+            "serialize": f'{serialize} ---> {found_hash}'
         },
         "body": {
             "merkle_root": merkle_root

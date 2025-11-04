@@ -40,6 +40,11 @@ class BlockHeader:
             return self.hash() == "00000000"
         return self.hash().startswith("0" * self.difficulty)
 
+    @staticmethod
+    def validate_hash(hash_str: str, difficulty: int) -> bool:
+        """Patikrina ar duotas hash atitinka difficulty (prefix nulių)."""
+        return isinstance(hash_str, str) and hash_str.startswith("0" * difficulty)
+
     @classmethod
     def create_with_current_time(cls, prev_hash: str, merkle_root: str, version: int = 1, difficulty: int = 3) -> "BlockHeader":
         """Patogus konstruktorius nustatantis timestamp į dabartinį UTC laiką (s Unix)."""
@@ -63,4 +68,4 @@ class BlockHeader:
             raise TypeError("body turi būti BlockBody instancija")
         return cls.create_with_current_time(prev_hash=prev_hash, merkle_root=body.merkle_root, version=version, difficulty=difficulty)
 
-    
+
