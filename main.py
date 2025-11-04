@@ -2,10 +2,12 @@ import sys
 import json
 import os
 import re
+import csv
 
 from Body import BlockBody
 from Header import BlockHeader
 from merkel_root2 import build_block_body
+from block_body import pick_random_transactions, remove_transactions_from_csv
 
 # Statinis pasirinkimas: keiskite čia į True arba False
 DEFAULT_USE_TREE: bool = False
@@ -21,7 +23,7 @@ def _format_levels_as_json(levels):
         for idx, lvl in enumerate(levels)
     ]
 
-def build_genesis_block_from_csv(csv_path: str, prev_hash: str = "00000000", use_tree: bool = DEFAULT_USE_TREE, mine: bool = DEFAULT_MINE, difficulty: int = 3, max_nonce: int = 10_000_000):
+def build_genesis_block_from_csv(csv_path: str, prev_hash: str = "00000000", use_tree: bool = DEFAULT_USE_TREE, mine: bool = DEFAULT_MINE, difficulty: int = 3, max_nonce: int = 10_000_000, users_path: str = None):
     txs = None
     levels = None
 
@@ -48,7 +50,7 @@ def build_genesis_block_from_csv(csv_path: str, prev_hash: str = "00000000", use
         print(f"Klaida kasant bloką: {e}")
         sys.exit(1)
 
-    # Patikriname rastą hash (neperkompensuojame papildomais hasho skaičiavimais)
+    # Patikriname rastą hash 
     if mine and not BlockHeader.validate_hash(found_hash, header.difficulty):
         print("Kasyba nebuvo sėkminga: rastas hash neatitinka difficulty reikalavimo.")
         sys.exit(1)
@@ -76,7 +78,91 @@ def build_genesis_block_from_csv(csv_path: str, prev_hash: str = "00000000", use
     if use_tree and levels is not None:
         block["body"]["merkle_tree_levels"] = _format_levels_as_json(levels)
 
+    # Pašaliname į bloką įtrauktas transakcijas iš CSV 
+    if txs:
+        tx_ids_in_block = set()
+        for tx in txs:
+            if not tx:
+                continue
+            if isinstance(tx, dict):
+                tid = tx.get("transaction_id") or tx.get("id")
+            elif isinstance(tx, str):
+                tid = tx
+            else:
+                tid = getattr(tx, "transaction_id", None)
+            if tid:
+                tx_ids_in_block.add(tid)
+
+        if tx_ids_in_block and os.path.isfile(csv_path):
+            try:
+                remove_transactions_from_csv(csv_path, tx_ids_in_block)
+            except Exception as e:
+                print(f"Įspėjimas: nepavyko pašalinti transakcijų iš CSV: {e}")
+
+    # Naujas: atnaujinti users.txt jei pateiktas kelias
+    if users_path and txs:
+        try:
+            from block_body import load_balances_from_users_txt, apply_transactions_simple, save_balances_to_users_txt
+            balances, meta = load_balances_from_users_txt(users_path, key_by="public_key")
+            # txs turi turėti laukus 'sender','receiver','amount' (atitinka transactions_min.csv)
+            apply_transactions_simple(txs, balances, allow_negative=False)
+            save_balances_to_users_txt(users_path, balances, meta)
+        except Exception as e:
+            print(f"Įspėjimas: nepavyko atnaujinti users.txt: {e}")
+
     return block
+
+def _count_transactions_in_csv(csv_path: str) -> int:
+    path = os.path.abspath(csv_path)
+    if not os.path.isfile(path):
+        return 0
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.reader(f)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return 0
+        # count non-empty rows
+        return sum(1 for row in reader if row and any(cell.strip() for cell in row))
+
+def mine_chain_from_csv(csv_path: str, users_path: str = "users.txt", use_tree: bool = True, difficulty: int = 3, max_nonce: int = 10_000_000, block_limit: int = None, output_path: str = "chain.json"):
+    """
+    Kasa blokus iteratyviai tol kol CSV tuščias.
+    Grąžina list'ą blokų ir išsaugo į output_path.
+    """
+    chain = []
+    prev_hash = "00000000"
+    idx = 0
+
+    while True:
+        remaining = _count_transactions_in_csv(csv_path)
+        if remaining == 0:
+            print("Nėra daugiau transakcijų CSV faile. Baigiama kasyba.")
+            break
+        if block_limit is not None and idx >= block_limit:
+            print(f"Pasiektas block limit: {block_limit}. Sustojama.")
+            break
+
+        print(f"Kasant bloką #{idx} (liko transakcijų: {remaining})...")
+        try:
+            block = build_genesis_block_from_csv(csv_path, prev_hash=prev_hash, use_tree=use_tree, mine=True, difficulty=difficulty, max_nonce=max_nonce, users_path=users_path)
+        except Exception as e:
+            print(f"Klaida kasant bloką #{idx}: {e}")
+            break
+
+        chain.append(block)
+        prev_hash = block.get("Block_hash", prev_hash)
+        idx += 1
+
+    # Išsaugome grandinę JSON formatu
+    try:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(chain, f, ensure_ascii=False, indent=2)
+        print(f"Grandinė išsaugota į {output_path} ({len(chain)} blokai).")
+    except Exception as e:
+        print(f"Įspėjimas: nepavyko įrašyti grandinės: {e}")
+
+    return chain
 
 if __name__ == "__main__":
     import sys, json
@@ -85,36 +171,24 @@ if __name__ == "__main__":
         sys.exit(1)
 
     csv_path = sys.argv[1]
+    # pagal nutylėjimą atnaujiname balances į users.txt, nebent nurodysite kitą failą
+    users_path = sys.argv[2] if len(sys.argv) > 2 else "users.txt"
+
+    # galiU perduoti trečią argumentą "single" jei noriU vieno bloko generavimo 
+    # arba "chain" (numatytoji) - kasa tol kol csv tuščias.
+    mode = sys.argv[3] if len(sys.argv) > 3 else "chain"
 
     try:
-        block = build_genesis_block_from_csv(csv_path)
+        if mode == "single":
+            block = build_genesis_block_from_csv(csv_path, users_path=users_path)
+            # rašome vieną block.txt 
+            with open("block.txt", "w", encoding="utf-8") as f:
+                f.write(json.dumps(block, ensure_ascii=False, indent=2))
+            print("Viena bloko operacija užbaigta.")
+        else:
+            # kasa grandinę tol kol CSV tuščias
+            mine_chain_from_csv(csv_path, users_path=users_path, use_tree=True, difficulty=3, max_nonce=10_000_000, block_limit=None, output_path="chain.json")
+
     except Exception as e:
         print(f"Klaida: {e}")
         sys.exit(1)
-
-    output_path = "block.txt"
-    try:
-        # sugeneruojame gražų JSON tekstą
-        json_text = json.dumps(block, ensure_ascii=False, indent=2)
-
-        # regex ras "hashes": [ ... ] blokus (su tarpais / newline) ir pakeis į vienos eilutės variantą
-        pattern = re.compile(r'("hashes"\s*:\s*)\[\s*([^\]]*?)\s*\]', re.S)
-
-        def _collapse_hashes(m):
-            prefix = m.group(1)
-            content = m.group(2)
-            items = re.findall(r'"([^"]+)"', content)
-            # formatuojame elementus tinkamai 
-            single_line = "[" + ", ".join(json.dumps(x, ensure_ascii=False) for x in items) + "]"
-            return prefix + single_line
-
-        json_text = pattern.sub(_collapse_hashes, json_text)
-
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(json_text)
-
-    except Exception as e:
-        print(f"Klaida įrašant failą: {e}")
-        sys.exit(1)
-
-    print(f"Rezultatai įrašyti į {output_path}")

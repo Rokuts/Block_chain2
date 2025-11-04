@@ -5,8 +5,8 @@ from block_body import pick_random_transactions
 import sys
 import json
 
-# DEFAULT_TREE nustato numatytąjį elgesį — True rašyti tree.txt, False vykdyti tik minimalų Merkle root skaičiavimą.
-DEFAULT_TREE: bool = False
+# DEFAULT_TREE nustato numatytąjį elgesį — True rašyti tree, False vykdyti tik minimalų Merkle root skaičiavimą.
+DEFAULT_TREE: bool = True
 DEFAULT_N = 5   # numatytasis atsitiktinių transakcijų skaičius
 DEFAULT_SEED = 12345
 
