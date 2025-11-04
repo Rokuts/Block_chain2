@@ -1,8 +1,8 @@
 import random
 from typing import List
 from dataclasses import dataclass
-from my_hash_function import hash_generator  # <- naudok savo hash
-from user import User  # Ensure to import the User class
+from my_hash_function import hash_generator 
+from user import User  
 import sys
 
 @dataclass
@@ -153,14 +153,14 @@ class UTXOGenerator:
             f.write("transaction_id,sender,receiver,amount,inputs\n")
             for tx in self.transactions:
                 sender = tx.inputs[0].owner if tx.inputs else ""
-                # Parenkam gavėjo output (jei yra change atgal siuntėjui – praleidžiam)
+                # Parenkam gavėjo output 
                 if tx.outputs:
                     recv_out = next((o for o in tx.outputs if o.owner != sender), tx.outputs[0])
                     receiver = recv_out.owner
                     amount = recv_out.amount
                 else:
                     receiver, amount = "", 0
-                # inputs as semi-colon separated "txid:tr_index"
+                
                 inputs_field = ";".join(f"{inp.transaction_id}:{inp.tr_index}" for inp in tx.inputs) if tx.inputs else ""
                 f.write(f"{tx.transaction_id},{sender},{receiver},{amount},{inputs_field}\n")
 
@@ -204,23 +204,5 @@ if __name__ == "__main__":
     tx_gen.generate_transactions(n_txs=20)
     tx_gen.save_transactions("transactions.txt")
     tx_gen.save_minimal_csv("transactions_min.csv")
-
-    # -------------------------
-    # Atnaujinti vartotojų balansus pagal galutinę UTXO būseną
-    final_balances = {}
-    for utxo in tx_gen.utxos:
-        final_balances[utxo.owner] = final_balances.get(utxo.owner, 0) + utxo.amount
-
-    for user in users:
-        user.balance = final_balances.get(user.public_key, 0)
-
-    # Išsaugoti atnaujintus balansus į users_final.txt (suderinta su UserGenerator.to_text_file formatu)
-    with open("users_final.txt", "w", encoding="utf-8") as f:
-        header = f"{'Name':30} {'PublicKey':10} {'Balance':>12}\n"
-        f.write(header)
-        f.write("-" * len(header) + "\n")
-        for u in users:
-            f.write(f"{u.name:30} {u.public_key:10} {u.balance:12,}\n")
-    # -------------------------
 
     print(f"Created transactions.txt and transactions_min.csv from {users_file}.")
